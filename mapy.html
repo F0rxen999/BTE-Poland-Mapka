@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mapa z dokładnymi współrzędnymi</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+    #info {
+      position: fixed;
+      bottom: 15px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-family: monospace;
+      font-size: 14px;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="info">Kliknij na mapie, aby uzyskać współrzędne</div>
+
+  <script>
+  // Tworzymy mapę — startowo Gliwice
+  const map = L.map('map').setView([50.2965, 18.6766], 17);
+
+  // Warstwa wysokiej jakości (ortofotomapa Esri)
+  const esriSat = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {
+      maxZoom: 21,
+      attribution: 'Źródło: Esri, Maxar, Earthstar Geographics'
+    }
+  ).addTo(map);
+
+  // Warstwa z drogami i nazwami (z OpenStreetMap)
+  const osm = L.tileLayer(
+    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    { opacity: 0.5 }
+  ).addTo(map);
+
+  const info = document.getElementById('info');
+  let marker = null;
+
+  // Kliknięcie na mapie — pobranie i skopiowanie współrzędnych
+  map.on('click', async function(e) {
+    const lat = e.latlng.lat.toFixed(7);
+    const lng = e.latlng.lng.toFixed(7);
+    const coords = `/tpll ${lat}, ${lng}`;
+
+    if (marker) map.removeLayer(marker);
+    marker = L.marker([lat, lng]).addTo(map);
+
+    try {
+      await navigator.clipboard.writeText(coords);
+      info.textContent = `📋 Skopiowano: ${coords}`;
+    } catch {
+      info.textContent = `Współrzędne: ${coords}`;
+    }
+  });
+  </script>
+</body>
+</html>
