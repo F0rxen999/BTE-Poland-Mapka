@@ -2,77 +2,1031 @@
 <html lang="pl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mapa z dokładnymi współrzędnymi</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>GeoMatrix v9.7 - 3 Layers</title>
+
+  <!-- LEAFLET + PLUGINS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- PROJ4 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.10.0/proj4.js"></script>
+  
+  <!-- SCREENSHOT LIB -->
+  <script src="https://unpkg.com/leaflet-simple-map-screenshoter"></script>
+  <!-- HEATMAP LIB -->
+  <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+  
+  <!-- ICONS -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
   <style>
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
+    /* VARIABLES */
+    :root {
+      --bg: #09090b; --panel: rgba(24, 24, 27, 0.98); --border: rgba(255, 255, 255, 0.1);
+      --accent: #8b5cf6; --accent-hover: #7c3aed; --text: #e4e4e7; --text-muted: #a1a1aa;
+      --font: 'Inter', system-ui, -apple-system, sans-serif; --radius: 12px; --anim: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      --success: #10b981; --danger: #ef4444; --shadow: 0 8px 30px rgba(0,0,0,0.5);
     }
-    #map {
-      height: 100%;
-      width: 100%;
+    [data-theme="light"] {
+      --bg: #f4f4f5; --panel: rgba(255, 255, 255, 0.98); --border: rgba(0, 0, 0, 0.08); --text: #18181b; --text-muted: #71717a; --shadow: 0 4px 20px rgba(0,0,0,0.1);
     }
-    #info {
-      position: fixed;
-      bottom: 15px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.8);
-      color: white;
-      padding: 10px 20px;
-      border-radius: 12px;
-      font-family: monospace;
-      font-size: 14px;
-      z-index: 1000;
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background:var(--bg); color:var(--text); font-family:var(--font); height:100vh; overflow:hidden; display: flex; }
+
+    .leaflet-tile-container img { image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; }
+
+    /* --- TOAST NOTIFICATIONS --- */
+    .toast-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+    .toast { background: var(--panel); border: 1px solid var(--border); padding: 12px 20px; border-radius: 50px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 10px; animation: slideUp 0.3s ease; backdrop-filter: blur(20px); pointer-events: auto; }
+    .toast i { font-size: 20px; }
+    .toast.success i { color: var(--success); }
+    .toast.error i { color: var(--danger); }
+    @keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+
+    /* --- SIDEBAR --- */
+    .sidebar {
+      width: 440px; background: var(--panel); backdrop-filter: blur(20px); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; z-index: 2000; transition: transform 0.3s ease; position: relative; height: 100%;
     }
+    .toggle-sidebar { display: none; position: fixed; top: 20px; left: 20px; z-index: 3000; background: var(--panel); border: 1px solid var(--border); padding: 10px; border-radius: 10px; cursor: pointer; color: var(--text); box-shadow: var(--shadow); }
+
+    @media(max-width: 900px){
+      .sidebar { position: fixed; left: 0; top: 0; bottom: 0; transform: translateX(-100%); width: 90%; max-width: 380px; }
+      .sidebar.open { transform: translateX(0); box-shadow: var(--shadow); }
+      .toggle-sidebar { display: block; }
+    }
+
+    /* HEADER */
+    .header { padding:22px 24px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-weight:800; font-size:20px; display:flex; align-items:center; gap:12px; background: linear-gradient(135deg, var(--accent), #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .logo i { color:var(--accent); font-size:28px; filter: drop-shadow(0 2px 4px rgba(139,92,246,0.3)); }
+    .theme-toggle { background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:24px; transition:var(--anim); padding: 8px; border-radius: 8px; }
+    .theme-toggle:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+
+    /* NAV */
+    .nav { display:grid; grid-template-columns: repeat(5, 1fr); gap:6px; padding:12px; border-bottom:1px solid var(--border); }
+    .nav-btn { 
+      padding:12px 6px; background:transparent; border:1px solid transparent; 
+      color:var(--text-muted); border-radius:10px; cursor:pointer; 
+      display:flex; flex-direction:column; align-items:center; gap:6px; transition:var(--anim); 
+    }
+    .nav-btn i { font-size:28px; }
+    .nav-btn span { font-size:9px; font-weight:800; letter-spacing: 0.5px; }
+    .nav-btn:hover { background:rgba(139,92,246,0.08); color:var(--text); }
+    .nav-btn.active { background:rgba(139,92,246,0.15); color:var(--accent); border-color:rgba(139,92,246,0.3); }
+
+    /* CONTENT */
+    .content { flex:1; overflow-y:auto; padding:20px; }
+    .content::-webkit-scrollbar { width: 8px; }
+    .content::-webkit-scrollbar-track { background: transparent; }
+    .content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+    .content::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+    .view { display:none; animation:fadeIn 0.3s; }
+    .view.active { display:block; }
+    @keyframes fadeIn { from{opacity:0; transform: translateY(10px);} to{opacity:1; transform: translateY(0);} }
+
+    h3 { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; margin:0 0 16px 0; color:var(--text-muted); }
+
+    /* COMPONENTS */
+    .card { background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:10px; cursor:pointer; transition:var(--anim); display:flex; align-items:center; gap:14px; }
+    .card:hover { transform:translateY(-2px); background:rgba(255,255,255,0.06); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .card.selected { border-color:var(--accent); background:rgba(139,92,246,0.12); box-shadow: 0 0 0 2px rgba(139,92,246,0.2); }
+    .card-icon { width:42px; height:42px; border-radius:11px; display:grid; place-items:center; color:white; font-size:24px; }
+
+    .btn { width:100%; padding:13px; background:var(--accent); color:white; border:none; border-radius:11px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:10px; transition:var(--anim); font-size: 13px; }
+    .btn:hover { background:var(--accent-hover); transform:translateY(-1px); box-shadow: 0 4px 12px rgba(139,92,246,0.4); }
+    .btn-sec { background:rgba(255,255,255,0.06); color:var(--text); }
+    .btn-sec:hover { background:rgba(255,255,255,0.1); box-shadow: none; }
+    .btn-danger { background:rgba(239, 68, 68, 0.15); color:#fca5a5; }
+    .btn-danger:hover { background:rgba(239, 68, 68, 0.25); }
+
+    .input-group { margin-bottom:14px; }
+    .input-group label { display:block; font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px; letter-spacing:0.5px; }
+    .input-group input, .input-group select { width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,0.05); color:var(--text); outline:none; font-family:inherit; font-size: 13px; transition: var(--anim); }
+    .input-group input:focus, .input-group select:focus { border-color: var(--accent); background:rgba(139,92,246,0.05); }
+
+    .search-box { position:relative; margin-bottom:20px; }
+    .search-box input { width:100%; padding:13px 42px 13px 16px; border-radius:11px; border:1px solid var(--border); background:rgba(255,255,255,0.05); color:var(--text); outline:none; font-family:inherit; font-size: 13px; transition: var(--anim); }
+    .search-box input:focus { border-color: var(--accent); background:rgba(139,92,246,0.05); }
+    .search-box i { position:absolute; right:14px; top:50%; transform:translateY(-50%); color:var(--text-muted); cursor:pointer; font-size: 18px; transition: var(--anim); }
+    .search-box i:hover { color: var(--accent); }
+
+    /* TOGGLE SWITCH */
+    .toggle-container { display: flex; align-items: center; justify-content: space-between; padding: 14px; background: rgba(255,255,255,0.04); border-radius: 11px; border: 1px solid var(--border); margin-bottom: 12px; }
+    .toggle-label { font-size: 12px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .toggle-label i { font-size: 18px; color: var(--accent); }
+    .toggle-switch { position: relative; width: 50px; height: 26px; background: rgba(255,255,255,0.1); border-radius: 20px; cursor: pointer; transition: var(--anim); border: 1px solid var(--border); }
+    .toggle-switch.active { background: var(--accent); border-color: var(--accent); }
+    .toggle-slider { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: var(--anim); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    .toggle-switch.active .toggle-slider { transform: translateX(24px); }
+
+    /* WALL DESIGN LAYOUT */
+    .wall-design-container { display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px; }
+    .wall-preview-title { font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:10px; letter-spacing: 0.5px; }
+    .wall-preview-canvas { width:100%; aspect-ratio:1; background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:12px; display:grid; grid-template-columns: repeat(10, 1fr); grid-template-rows: repeat(10, 1fr); overflow:hidden; box-shadow: inset 0 2px 8px rgba(0,0,0,0.3); }
+    .wall-pixel { width:100%; height:100%; transition: opacity 0.1s; }
+
+    /* MIXER BLOCKS */
+    .mixer-block { background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:11px; padding:12px; margin-bottom:10px; transition: var(--anim); }
+    .mixer-block:hover { background:rgba(255,255,255,0.08); }
+    .mixer-block-header { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+    .mixer-block-icon { width:36px; height:36px; border-radius:8px; border:1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+    .mixer-block-header select { flex:1; background:rgba(255,255,255,0.05); border:1px solid var(--border); color:var(--text); font-size:12px; font-weight:600; padding: 8px 10px; border-radius: 8px; outline: none; cursor: pointer; transition: var(--anim); }
+    .mixer-block-header select:hover { background:rgba(255,255,255,0.08); border-color: var(--accent); }
+    .mixer-block-header .remove { background:rgba(239,68,68,0.12); color:#ef4444; border:none; padding:6px 10px; border-radius:7px; cursor:pointer; font-size:11px; font-weight: 600; transition: var(--anim); }
+    .mixer-block-header .remove:hover { background:rgba(239,68,68,0.2); transform: scale(1.05); }
+    .mixer-slider-container { display:flex; align-items:center; gap:12px; }
+    .mixer-slider-container input[type="range"] { flex:1; height: 6px; border-radius: 10px; background: rgba(255,255,255,0.1); outline: none; -webkit-appearance: none; }
+    .mixer-slider-container input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); cursor: pointer; box-shadow: 0 2px 6px rgba(139,92,246,0.4); transition: var(--anim); }
+    .mixer-slider-container input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); box-shadow: 0 3px 10px rgba(139,92,246,0.6); }
+    .mixer-slider-container .percent { min-width:45px; text-align:right; font-weight:700; color:var(--accent); font-size:14px; }
+
+    .add-block-btn { width:100%; padding:13px; border:2px dashed var(--border); background:rgba(255,255,255,0.02); color:var(--text-muted); border-radius:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; font-size:13px; font-weight:600; transition:var(--anim); }
+    .add-block-btn:hover { border-color:var(--accent); background:rgba(139,92,246,0.08); color:var(--accent); transform: translateY(-1px); }
+
+    /* VISUAL MATCHER GRID */
+    .block-grid { display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-top:16px; }
+    .block-item { background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:11px; padding:12px; text-align:center; cursor:pointer; transition:var(--anim); }
+    .block-item:hover { transform:translateY(-2px); border-color:var(--accent); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .block-item-icon { width:100%; height:56px; border-radius:8px; margin-bottom:8px; display: flex; align-items: center; justify-content: center; font-size: 32px; }
+    .block-item .name { font-size:10px; font-weight:600; color:var(--text); margin-bottom: 4px; }
+    .block-item .match { font-size:10px; color:var(--accent); font-weight: 600; }
+
+    /* WORLDEDIT OUTPUT */
+    .we-output { background:rgba(0,0,0,0.4); padding:16px; border-radius:11px; border:1px solid var(--border); font-family:'Courier New', monospace; font-size:12px; margin-top:14px; position:relative; word-break:break-all; line-height: 1.6; box-shadow: inset 0 2px 8px rgba(0,0,0,0.3); }
+    .copy-btn-inline { position:absolute; top:10px; right:10px; background:var(--accent); border:none; color:white; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:11px; font-weight: 600; transition: var(--anim); }
+    .copy-btn-inline:hover { background:var(--accent-hover); transform: scale(1.05); }
+
+    /* MAP AREA */
+    .map-wrapper { flex:1; position:relative; height:100%; }
+    #map { width:100%; height:100%; background:#0a0a0a; z-index:1; }
+    
+    .map-tools { position: fixed; top:20px; right:20px; display:flex; flex-direction:column; gap:10px; z-index:1000; }
+    .tool-btn { width:48px; height:48px; background:var(--panel); backdrop-filter:blur(20px); color:var(--text); border:1px solid var(--border); border-radius:12px; display:grid; place-items:center; cursor:pointer; font-size:24px; transition:var(--anim); box-shadow:var(--shadow); }
+    .tool-btn:hover { background:var(--accent); color:white; transform:scale(1.08); box-shadow: 0 6px 20px rgba(139,92,246,0.4); }
+    
+    .undo-btn { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--border); padding: 12px 24px; border-radius: 40px; display: flex; align-items: center; gap: 10px; cursor: pointer; z-index: 1000; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: 0.3s; font-weight: 600; font-size:13px; backdrop-filter: blur(20px); }
+    .undo-btn.visible { opacity: 1; pointer-events: auto; bottom: 40px; }
+    .undo-btn:hover { background: var(--accent); color: white; transform: translateX(-50%) translateY(-2px); }
+
+    .custom-marker { display:flex; justify-content:center; align-items:center; }
+    .marker-pulse { width:20px; height:20px; background:var(--accent); border:4px solid white; border-radius:50%; animation:pulse 2s infinite; box-shadow:0 4px 15px rgba(139,92,246,0.6); }
+    @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(139,92,246,0.7)} 70%{box-shadow:0 0 0 10px transparent} 100%{box-shadow:0 0 0 0 transparent} }
+    .leaflet-popup-content-wrapper { background:rgba(20,20,25,0.98); color:white; border-radius:14px; border:1px solid var(--border); backdrop-filter:blur(20px); box-shadow: var(--shadow); }
+    .leaflet-popup-tip { background:rgba(20,20,25,0.98); }
+
+    /* AUTOCOMPLETE */
+    .autocomplete { position:relative; }
+    .autocomplete-list { position:absolute; top:100%; left:0; right:0; background:var(--panel); border:1px solid var(--border); border-radius:10px; max-height:220px; overflow-y:auto; z-index:100; margin-top:6px; box-shadow: var(--shadow); backdrop-filter: blur(20px); }
+    .autocomplete-list::-webkit-scrollbar { width: 6px; }
+    .autocomplete-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+    .autocomplete-item { padding:11px 14px; cursor:pointer; font-size:12px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; transition: var(--anim); }
+    .autocomplete-item:last-child { border-bottom: none; }
+    .autocomplete-item:hover { background:rgba(139,92,246,0.12); }
+    .autocomplete-item .color-box { width:30px; height:30px; border-radius:6px; border:1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+
+    /* WALL SUMS */
+    .wall-sum { padding:12px; background:rgba(139,92,246,0.1); border:1px solid rgba(139,92,246,0.3); border-radius:10px; text-align:center; font-size:13px; margin-top:12px; }
+    .wall-sum span { color:var(--text-muted); font-weight: 500; }
+    .wall-sum strong { font-weight:700; color:var(--accent); font-size: 15px; }
   </style>
 </head>
-<body>
+<body data-theme="dark">
+
+<div class="toast-container" id="toast-container"></div>
+<button class="toggle-sidebar" onclick="toggleSidebar()"><i class="ph ph-list"></i></button>
+
+<div class="sidebar" id="sidebar">
+  <div class="header">
+    <div class="logo"><i class="ph-fill ph-planet"></i> GeoMatrix v9.7</div>
+    <button class="theme-toggle" onclick="toggleTheme()"><i class="ph ph-moon"></i></button>
+  </div>
+
+  <div class="nav">
+    <button class="nav-btn active" onclick="tab('map',this)">
+      <i class="ph ph-map-trifold"></i> <span>MAPA</span>
+    </button>
+    <button class="nav-btn" onclick="tab('matcher',this)">
+      <i class="ph ph-eye"></i> <span>MATCHER</span>
+    </button>
+    <button class="nav-btn" onclick="tab('wall',this)">
+      <i class="ph ph-palette"></i> <span>WALL GEN</span>
+    </button>
+    <button class="nav-btn" onclick="tab('worldedit',this)">
+      <i class="ph ph-cube"></i> <span>WORLDEDIT</span>
+    </button>
+    <button class="nav-btn" onclick="tab('tools',this)">
+      <i class="ph ph-toolbox"></i> <span>NARZĘDZIA</span>
+    </button>
+  </div>
+
+  <div class="content">
+    
+    <!-- MAP TAB -->
+    <div id="view-map" class="view active">
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Szukaj adresu..." onkeypress="handleSearch(event)">
+        <i class="ph ph-magnifying-glass" onclick="doSearch()"></i>
+      </div>
+
+      <!-- AUTO-COPY TOGGLE -->
+      <div class="toggle-container">
+        <div class="toggle-label">
+          <i class="ph ph-copy"></i>
+          <span>Auto-kopiuj /tpll</span>
+        </div>
+        <div class="toggle-switch active" id="autocopy-toggle" onclick="toggleAutoCopy()">
+          <div class="toggle-slider"></div>
+        </div>
+      </div>
+
+      <div class="card selected" onclick="setLayer('google',this)">
+        <div class="card-icon" style="background: linear-gradient(135deg, #4285F4, #34A853);"><i class="ph ph-google-logo"></i></div>
+        <div><b>Google Hybrid</b><br><small style="color:var(--text-muted);font-size:11px;">Satelita + nazwy</small></div>
+      </div>
+      <div class="card" onclick="setLayer('esri',this)">
+        <div class="card-icon" style="background: linear-gradient(135deg, #0079c1, #005a87);"><i class="ph ph-globe-hemisphere-west"></i></div>
+        <div><b>Esri World Imagery</b><br><small style="color:var(--text-muted);font-size:11px;">Czysty satelita HD</small></div>
+      </div>
+      <div class="card" onclick="setLayer('geoportal',this)">
+        <div class="card-icon" style="background: linear-gradient(135deg, #ef4444, #b91c1c);"><i class="ph ph-flag"></i></div>
+        <div><b>Geoportal (PL)</b><br><small style="color:var(--text-muted);font-size:11px;">Polska ortofotomapa</small></div>
+      </div>
+
+      <div style="margin-top:20px; padding:18px; background:rgba(255,255,255,0.04); border-radius:14px; border:1px solid var(--border);">
+        <small style="text-transform:uppercase; color:var(--text-muted); font-size:10px; font-weight:700; letter-spacing: 0.5px;">WGS84 (Decimal Degrees)</small>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+          <code id="last-tpll" style="font-family:monospace; color:var(--accent); font-size: 12px;">---</code>
+          <i class="ph ph-copy" style="cursor:pointer; font-size: 18px; transition: var(--anim);" onclick="copyLast()"></i>
+        </div>
+        <button class="btn btn-sec" style="font-size:12px; margin-top:12px;" onclick="shareLink()"><i class="ph ph-share-network"></i> Udostępnij</button>
+      </div>
+    </div>
+
+    <!-- VISUAL MATCHER TAB -->
+    <div id="view-matcher" class="view">
+      <h3>🎨 Visual Matcher</h3>
+      <div class="input-group autocomplete">
+        <label>Wybierz blok bazowy</label>
+        <input type="text" id="matcher-search" placeholder="Wpisz nazwę..." oninput="debounce(()=>searchBlock(this.value), 300)">
+        <div id="matcher-autocomplete" class="autocomplete-list" style="display:none;"></div>
+      </div>
+
+      <div id="matcher-result"></div>
+    </div>
+
+    <!-- WALL DESIGN GENERATOR TAB -->
+    <div id="view-wall" class="view">
+      <h3>🧱 Wall Design Generator</h3>
+      
+      <div class="wall-design-container">
+        <!-- LEFT: MIXER -->
+        <div class="wall-mixer">
+          <div class="wall-preview-title">Mixer</div>
+          <div id="wall-blocks"></div>
+          <button class="add-block-btn" onclick="addWallBlock()"><i class="ph ph-plus"></i> Dodaj blok</button>
+          <div class="wall-sum">
+            <span>Suma:</span> <strong id="wall-total">0%</strong>
+          </div>
+        </div>
+
+        <!-- RIGHT: PREVIEW -->
+        <div class="wall-preview-section">
+          <div class="wall-preview-title">Podgląd ściany 10x10</div>
+          <div class="wall-preview-canvas" id="wall-canvas"></div>
+          <button class="btn btn-sec" style="font-size:11px; margin-top:10px;" onclick="regenerateWall()"><i class="ph ph-arrows-clockwise"></i> Regeneruj</button>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label>Gotowa komenda</label>
+        <select id="wall-cmd-type" onchange="updateWallCommand()">
+          <option value="set">//SET</option>
+          <option value="replace">//REPLACE</option>
+        </select>
+      </div>
+
+      <div class="we-output">
+        <button class="copy-btn-inline" onclick="copyWallCommand()">Kopiuj</button>
+        <code id="wall-command">//set stone</code>
+      </div>
+    </div>
+
+    <!-- WORLDEDIT HELPER TAB -->
+    <div id="view-worldedit" class="view">
+      <h3>⚙️ WorldEdit Helper</h3>
+      <div class="input-group">
+        <label>//SEL (zaznaczanie)</label>
+        <select id="we-sel" onchange="updateWECommand()">
+          <option value="cuboid">cuboid - prostokąt</option>
+          <option value="poly">poly - wielokąt</option>
+          <option value="convex">convex - wypukły</option>
+          <option value="sphere">sphere - kula</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <label>//SET / //REPLACE</label>
+        <select id="we-type" onchange="updateWEUI()">
+          <option value="set">//set - wypełnij</option>
+          <option value="replace">//replace - zamień</option>
+        </select>
+      </div>
+      <div class="input-group" id="we-from-group" style="display:none;">
+        <label>Blok do zamiany (FROM)</label>
+        <input type="text" id="we-from" placeholder="stone" oninput="updateWECommand()">
+      </div>
+      <div class="input-group">
+        <label>Blok docelowy (TO)</label>
+        <input type="text" id="we-to" placeholder="oak_planks" oninput="updateWECommand()">
+      </div>
+      <div class="input-group">
+        <label>Logika / Flagi</label>
+        <select id="we-logic" onchange="updateWECommand()">
+          <option value="">Brak</option>
+          <option value=">stone">Nad kamieniem (>stone)</option>
+          <option value="<stone">Pod kamieniem (<stone)</option>
+          <option value="|stone">Obok kamienia (|stone)</option>
+          <option value="!stone">Nie kamień (!stone)</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <label>Maski specjalne</label>
+        <select id="we-mask" onchange="updateWECommand()">
+          <option value="">Brak</option>
+          <option value="#noside">Bloki wewnętrzne (#noside)</option>
+          <option value="#surface">Tylko zewnętrzne (#surface)</option>
+        </select>
+      </div>
+      <h3 style="margin-top:24px;">🖌️ Pędzle /br</h3>
+      <div class="input-group">
+        <label>Rodzaj</label>
+        <select id="we-brush" onchange="updateWECommand()">
+          <option value="sphere">sphere - kula</option>
+          <option value="cyl">cyl - cylinder</option>
+          <option value="clipboard">clipboard - schowek</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <label>Promień / Wielkość</label>
+        <input type="number" id="we-radius" value="5" min="1" max="50" oninput="updateWECommand()">
+      </div>
+      <div class="we-output">
+        <button class="copy-btn-inline" onclick="copyWECommand()">Kopiuj</button>
+        <code id="we-output-text">//set stone</code>
+      </div>
+    </div>
+
+    <!-- TOOLS TAB -->
+    <div id="view-tools" class="view">
+      <h3>📍 Historia Map</h3>
+      <div id="hist-list" style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:11px; margin-bottom:12px; background: rgba(0,0,0,0.2);">
+        <div style="padding:18px; text-align:center; color:var(--text-muted); font-size:12px;">Brak historii</div>
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:24px;">
+          <button class="btn btn-sec" onclick="exportHistory()"><i class="ph ph-download-simple"></i> Eksport</button>
+          <button class="btn btn-danger" onclick="clearHistory()"><i class="ph ph-trash"></i> Czyść</button>
+      </div>
+
+      <h3>🛠️ Pomiary & Heatmapa</h3>
+      <div class="card" id="ruler-card" onclick="toggleRuler()">
+        <div class="card-icon" style="background:#f59e0b;"><i class="ph ph-ruler"></i></div>
+        <div><b>Miernik odległości</b><br><small id="ruler-status" style="color:var(--text-muted);font-size:11px;">Nieaktywny</small></div>
+      </div>
+      <div class="card" onclick="toggleHeatmap()">
+        <div class="card-icon" style="background:#ec4899;"><i class="ph ph-fire"></i></div>
+        <div><b>Heatmapa</b><br><small style="color:var(--text-muted);font-size:11px;">Pokaż kliknięcia</small></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="map-wrapper">
   <div id="map"></div>
-  <div id="info">Kliknij na mapie, aby uzyskać współrzędne</div>
+  
+  <div class="map-tools">
+    <div class="tool-btn" onclick="userLoc()" title="Lokalizacja"><i class="ph ph-crosshair"></i></div>
+    <div class="tool-btn" onclick="takeScreenshot()" title="Zrzut"><i class="ph ph-camera"></i></div>
+    <div class="tool-btn" onclick="clearMap()" title="Wyczyść"><i class="ph ph-trash"></i></div>
+  </div>
 
-  <script>
-  // Tworzymy mapę — startowo Gliwice
-  const map = L.map('map').setView([50.2965, 18.6766], 17);
+  <div id="undo-btn" class="undo-btn" onclick="undoLast()">
+    <i class="ph ph-arrow-u-up-left" style="font-size: 18px;"></i> Cofnij
+  </div>
+</div>
 
-  // Warstwa wysokiej jakości (ortofotomapa Esri)
-  const esriSat = L.tileLayer(
-    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    {
-      maxZoom: 21,
-      attribution: 'Źródło: Esri, Maxar, Earthstar Geographics'
-    }
-  ).addTo(map);
+<script>
+// === MINECRAFT BLOCKS DATABASE ===
+const BLOCKS = [
+  {n:"stone", d:"Stone", c:"#7d7d7d", r:125, g:125, b:125, e:"⬜"},
+  {n:"grass_block", d:"Grass Block", c:"#5b8d34", r:91, g:141, b:52, e:"🟩"},
+  {n:"dirt", d:"Dirt", c:"#8b6c42", r:139, g:108, b:66, e:"🟫"},
+  {n:"cobblestone", d:"Cobblestone", c:"#7a7a7a", r:122, g:122, b:122, e:"◼️"},
+  {n:"oak_planks", d:"Oak Planks", c:"#9c7f4e", r:156, g:127, b:78, e:"🪵"},
+  {n:"spruce_planks", d:"Spruce Planks", c:"#6e5230", r:110, g:82, b:48, e:"🌲"},
+  {n:"birch_planks", d:"Birch Planks", c:"#d7cb8d", r:215, g:203, b:141, e:"🪵"},
+  {n:"jungle_planks", d:"Jungle Planks", c:"#a67c52", r:166, g:124, b:82, e:"🌴"},
+  {n:"acacia_planks", d:"Acacia Planks", c:"#ba6f4f", r:186, g:111, b:79, e:"🪵"},
+  {n:"dark_oak_planks", d:"Dark Oak Planks", c:"#4a331c", r:74, g:51, b:28, e:"🪵"},
+  {n:"sand", d:"Sand", c:"#dbd3a0", r:219, g:211, b:160, e:"🏜️"},
+  {n:"red_sand", d:"Red Sand", c:"#a85d3b", r:168, g:93, b:59, e:"🏜️"},
+  {n:"gravel", d:"Gravel", c:"#7a7a7a", r:122, g:122, b:122, e:"◾"},
+  {n:"gold_block", d:"Gold Block", c:"#fcee4b", r:252, g:238, b:75, e:"🟨"},
+  {n:"iron_block", d:"Iron Block", c:"#d8d8d8", r:216, g:216, b:216, e:"⬜"},
+  {n:"coal_block", d:"Coal Block", c:"#1a1a1a", r:26, g:26, b:26, e:"⬛"},
+  {n:"diamond_block", d:"Diamond Block", c:"#5decf5", r:93, g:236, b:245, e:"💎"},
+  {n:"emerald_block", d:"Emerald Block", c:"#00d863", r:0, g:216, b:99, e:"💚"},
+  {n:"lapis_block", d:"Lapis Block", c:"#1f4ba6", r:31, g:75, b:166, e:"🟦"},
+  {n:"redstone_block", d:"Redstone Block", c:"#a01e09", r:160, g:30, b:9, e:"🟥"},
+  {n:"oak_log", d:"Oak Log", c:"#6f5a3a", r:111, g:90, b:58, e:"🪵"},
+  {n:"spruce_log", d:"Spruce Log", c:"#3d2712", r:61, g:39, b:18, e:"🌲"},
+  {n:"birch_log", d:"Birch Log", c:"#d7d7d7", r:215, g:215, b:215, e:"🪵"},
+  {n:"oak_leaves", d:"Oak Leaves", c:"#5ea818", r:94, g:168, b:24, e:"🍃"},
+  {n:"spruce_leaves", d:"Spruce Leaves", r:97, g:153, b:97, c:"#619961", e:"🌿"},
+  {n:"glass", d:"Glass", c:"#c0f6fe", r:192, g:246, b:254, e:"◻️"},
+  {n:"white_wool", d:"White Wool", c:"#e9ecec", r:233, g:236, b:236, e:"⬜"},
+  {n:"orange_wool", d:"Orange Wool", c:"#f07613", r:240, g:118, b:19, e:"🟧"},
+  {n:"magenta_wool", d:"Magenta Wool", c:"#bd44b3", r:189, g:68, b:179, e:"🟪"},
+  {n:"light_blue_wool", d:"Light Blue Wool", c:"#3aafd9", r:58, g:175, b:217, e:"🔷"},
+  {n:"yellow_wool", d:"Yellow Wool", c:"#fed83d", r:254, g:216, b:61, e:"🟨"},
+  {n:"lime_wool", d:"Lime Wool", c:"#80c71f", r:128, g:199, b:31, e:"🟩"},
+  {n:"pink_wool", d:"Pink Wool", c:"#f38caa", r:243, g:140, b:170, e:"🩷"},
+  {n:"gray_wool", d:"Gray Wool", c:"#474f52", r:71, g:79, b:82, e:"◼️"},
+  {n:"light_gray_wool", d:"Light Gray Wool", c:"#9aa1a1", r:154, g:161, b:161, e:"◽"},
+  {n:"cyan_wool", d:"Cyan Wool", c:"#169c9c", r:22, g:156, b:156, e:"🔷"},
+  {n:"purple_wool", d:"Purple Wool", c:"#8932b8", r:137, g:50, b:184, e:"🟪"},
+  {n:"blue_wool", d:"Blue Wool", c:"#35399d", r:53, g:57, b:157, e:"🟦"},
+  {n:"brown_wool", d:"Brown Wool", c:"#724728", r:114, g:71, b:40, e:"🟫"},
+  {n:"green_wool", d:"Green Wool", c:"#546d1b", r:84, g:109, b:27, e:"🟩"},
+  {n:"red_wool", d:"Red Wool", c:"#a12722", r:161, g:39, b:34, e:"🟥"},
+  {n:"black_wool", d:"Black Wool", c:"#191919", r:25, g:25, b:25, e:"⬛"},
+  {n:"white_concrete", d:"White Concrete", c:"#cfcfcf", r:207, g:207, b:207, e:"⬜"},
+  {n:"orange_concrete", d:"Orange Concrete", c:"#e06100", r:224, g:97, b:0, e:"🟧"},
+  {n:"magenta_concrete", d:"Magenta Concrete", c:"#a9289f", r:169, g:40, b:159, e:"🟪"},
+  {n:"light_blue_concrete", d:"Light Blue Concrete", c:"#2389c6", r:35, g:137, b:198, e:"🔷"},
+  {n:"yellow_concrete", d:"Yellow Concrete", c:"#f0af15", r:240, g:175, b:21, e:"🟨"},
+  {n:"lime_concrete", d:"Lime Concrete", c:"#5ea818", r:94, g:168, b:24, e:"🟩"},
+  {n:"pink_concrete", d:"Pink Concrete", c:"#d5658e", r:213, g:101, b:142, e:"🩷"},
+  {n:"gray_concrete", d:"Gray Concrete", c:"#363838", r:54, g:56, b:56, e:"◼️"},
+  {n:"light_gray_concrete", d:"Light Gray Concrete", c:"#7d7d73", r:125, g:125, b:115, e:"◽"},
+  {n:"cyan_concrete", d:"Cyan Concrete", c:"#167b8c", r:22, g:123, b:140, e:"🔷"},
+  {n:"purple_concrete", d:"Purple Concrete", c:"#641f9c", r:100, g:31, b:156, e:"🟪"},
+  {n:"blue_concrete", d:"Blue Concrete", c:"#2c2e8f", r:44, g:46, b:143, e:"🟦"},
+  {n:"brown_concrete", d:"Brown Concrete", c:"#603b1f", r:96, g:59, b:31, e:"🟫"},
+  {n:"green_concrete", d:"Green Concrete", c:"#495b24", r:73, g:91, b:36, e:"🟩"},
+  {n:"red_concrete", d:"Red Concrete", c:"#8f2f2d", r:143, g:47, b:45, e:"🟥"},
+  {n:"black_concrete", d:"Black Concrete", c:"#080a0f", r:8, g:10, b:15, e:"⬛"},
+  {n:"terracotta", d:"Terracotta", c:"#985e42", r:152, g:94, b:66, e:"🟫"},
+  {n:"white_terracotta", d:"White Terracotta", c:"#d1b1a1", r:209, g:177, b:161, e:"◽"},
+  {n:"orange_terracotta", d:"Orange Terracotta", c:"#a15325", r:161, g:83, b:37, e:"🟧"},
+  {n:"red_terracotta", d:"Red Terracotta", c:"#8e3c2e", r:142, g:60, b:46, e:"🟥"},
+  {n:"netherrack", d:"Netherrack", c:"#6f3634", r:111, g:54, b:52, e:"🔥"},
+  {n:"nether_bricks", d:"Nether Bricks", c:"#2c161d", r:44, g:22, b:29, e:"🧱"},
+  {n:"red_nether_bricks", d:"Red Nether Bricks", c:"#6b0d10", r:107, g:13, b:16, e:"🟥"},
+  {n:"glowstone", d:"Glowstone", c:"#b89e67", r:184, g:158, b:103, e:"💡"},
+  {n:"end_stone", d:"End Stone", c:"#dce1a4", r:220, g:225, b:164, e:"🌙"},
+  {n:"purpur_block", d:"Purpur Block", c:"#a77ba7", r:167, g:123, b:167, e:"🟪"},
+  {n:"prismarine", d:"Prismarine", c:"#639e96", r:99, g:158, b:150, e:"🌊"},
+  {n:"quartz_block", d:"Quartz Block", c:"#ebe7de", r:235, g:231, b:222, e:"⬜"},
+  {n:"smooth_stone", d:"Smooth Stone", c:"#9d9d9d", r:157, g:157, b:157, e:"◽"},
+  {n:"sandstone", d:"Sandstone", c:"#d9c899", r:217, g:200, b:153, e:"🏜️"},
+  {n:"red_sandstone", d:"Red Sandstone", c:"#b6613b", r:182, g:97, b:59, e:"🟧"},
+  {n:"bricks", d:"Bricks", c:"#965a4a", r:150, g:90, b:74, e:"🧱"},
+  {n:"mossy_cobblestone", d:"Mossy Cobblestone", c:"#6a7364", r:106, g:115, b:100, e:"🌿"},
+  {n:"obsidian", d:"Obsidian", c:"#0f0d16", r:15, g:13, b:22, e:"⬛"},
+  {n:"blackstone", d:"Blackstone", c:"#2a1f2e", r:42, g:31, b:46, e:"◼️"},
+  {n:"deepslate", d:"Deepslate", c:"#4f4f4f", r:79, g:79, b:79, e:"◼️"},
+  {n:"calcite", d:"Calcite", c:"#e3e5df", r:227, g:229, b:223, e:"⬜"},
+  {n:"moss_block", d:"Moss Block", c:"#586d4a", r:88, g:109, b:74, e:"🌿"},
+  {n:"copper_block", d:"Copper Block", c:"#b56651", r:181, g:102, b:81, e:"🟠"},
+  {n:"amethyst_block", d:"Amethyst Block", c:"#854eb7", r:133, g:78, b:183, e:"💜"},
+  {n:"snow_block", d:"Snow Block", c:"#f7fffe", r:247, g:255, b:254, e:"❄️"},
+  {n:"clay", d:"Clay", c:"#a0a7b4", r:160, g:167, b:180, e:"◽"},
+  {n:"warped_planks", d:"Warped Planks", c:"#3a726a", r:58, g:114, b:106, e:"🌀"},
+  {n:"crimson_planks", d:"Crimson Planks", c:"#682f43", r:104, g:47, b:67, e:"🔴"},
+  {n:"basalt", d:"Basalt", c:"#565659", r:86, g:86, b:89, e:"◼️"},
+  {n:"netherite_block", d:"Netherite Block", c:"#443c3d", r:68, g:60, b:61, e:"⬛"},
+  {n:"redstone_ore", d:"Redstone Ore", c:"#8d191a", r:141, g:25, b:26, e:"🔴"}
+];
 
-  // Warstwa z drogami i nazwami (z OpenStreetMap)
-  const osm = L.tileLayer(
-    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    { opacity: 0.5 }
-  ).addTo(map);
+// === SETTINGS ===
+let autoCopyEnabled = localStorage.getItem('autoCopy') !== 'false';
 
-  const info = document.getElementById('info');
-  let marker = null;
+// === DEBOUNCE HELPER ===
+let debounceTimer;
+function debounce(func, delay) {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(func, delay);
+}
 
-  // Kliknięcie na mapie — pobranie i skopiowanie współrzędnych
-  map.on('click', async function(e) {
-    const lat = e.latlng.lat.toFixed(7);
-    const lng = e.latlng.lng.toFixed(7);
-    const coords = `/tpll ${lat}, ${lng}`;
+// === TOAST ===
+function showToast(msg, type='success') {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<i class="ph ph-${type==='success'?'check-circle':'warning-circle'}"></i> <span>${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(()=>t.remove(), 3000);
+}
 
-    if (marker) map.removeLayer(marker);
-    marker = L.marker([lat, lng]).addTo(map);
+// === AUTO-COPY TOGGLE ===
+function toggleAutoCopy() {
+  autoCopyEnabled = !autoCopyEnabled;
+  localStorage.setItem('autoCopy', autoCopyEnabled);
+  
+  const toggle = document.getElementById('autocopy-toggle');
+  if(autoCopyEnabled) {
+    toggle.classList.add('active');
+    showToast("Auto-kopiowanie włączone");
+  } else {
+    toggle.classList.remove('active');
+    showToast("Auto-kopiowanie wyłączone", "error");
+  }
+}
 
+// Init toggle state
+window.addEventListener('load', () => {
+  const toggle = document.getElementById('autocopy-toggle');
+  if(autoCopyEnabled) {
+    toggle.classList.add('active');
+  } else {
+    toggle.classList.remove('active');
+  }
+});
+
+// === MAP INIT ===
+const urlParams = new URLSearchParams(window.location.search);
+const startLat = urlParams.get('lat') || 50.2965;
+const startLng = urlParams.get('lng') || 18.6766;
+const startZoom = urlParams.get('zoom') || 15;
+
+const map = L.map('map', {zoomControl:false, attributionControl:false}).setView([startLat, startLng], startZoom);
+L.control.zoom({position:'bottomright'}).addTo(map);
+L.simpleMapScreenshoter({hidden:true}).addTo(map);
+
+let historyData = JSON.parse(localStorage.getItem('geoHistory') || '[]');
+let marker = null;
+let lastTPLL = "";
+let rulerMode = false;
+let rulerPoints = [];
+let rulerLine = null;
+let heatLayer = null;
+let heatData = [];
+
+// === 3 WARSTWY MAP ===
+const lyrs = {
+  google: L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+    maxZoom: 22,
+    subdomains: ['mt0','mt1','mt2','mt3']
+  }),
+  esri: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 22,
+    attribution: 'Esri, DigitalGlobe, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community'
+  }),
+  geoportal: L.tileLayer('https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMTS/StandardResolution?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTOFOTOMAPA&STYLE=default&FORMAT=image/jpeg&TILEMATRIXSET=EPSG:3857&TILEMATRIX=EPSG:3857:{z}&TILEROW={y}&TILECOL={x}', {
+    maxZoom: 22,
+    maxNativeZoom: 19 
+  })
+};
+lyrs.google.addTo(map);
+
+renderHistory();
+
+// === MAP CLICK - WGS84 DECIMAL DEGREES ===
+map.on('click', async function(e){
+  if(rulerMode) { handleRuler(e.latlng); return; }
+
+  const lat = e.latlng.lat;
+  const lng = e.latlng.lng;
+  
+  const tpll = `/tpll ${lat.toFixed(6)} ${lng.toFixed(6)}`;
+  lastTPLL = tpll;
+  
+  if(marker) map.removeLayer(marker);
+  const icon = L.divIcon({className:'custom-marker', html:'<div class="marker-pulse"></div>', iconSize:[20,20]});
+  marker = L.marker([lat,lng], {icon:icon}).addTo(map);
+
+  heatData.push([lat, lng, 0.5]);
+  if(heatLayer) { map.removeLayer(heatLayer); heatLayer = L.heatLayer(heatData, {radius:25}).addTo(map); }
+
+  // AUTO-COPY (jeśli włączone)
+  if(autoCopyEnabled) {
     try {
-      await navigator.clipboard.writeText(coords);
-      info.textContent = `📋 Skopiowano: ${coords}`;
-    } catch {
-      info.textContent = `Współrzędne: ${coords}`;
+      await navigator.clipboard.writeText(tpll);
+      showToast("Skopiowano " + tpll);
+    } catch(e) {
+      console.log("Clipboard error:", e);
+    }
+  }
+
+  let addr = "Pobieranie...";
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+    const d = await r.json();
+    addr = (d.address.road || "") + " " + (d.address.city || d.address.town || "");
+    if(addr.trim().length < 2) addr = "Nieznana lokalizacja";
+  } catch(e){ addr = "Błąd adresu"; }
+
+  marker.bindPopup(`<b>${addr}</b><br><code style="color:var(--accent)">${tpll}</code>`, {autoPan:true}).openPopup();
+  document.getElementById('last-tpll').innerText = tpll;
+
+  historyData.unshift({addr, tpll, lat, lng, date: new Date().toLocaleString()});
+  if(historyData.length > 20) historyData.pop();
+  localStorage.setItem('geoHistory', JSON.stringify(historyData));
+  renderHistory();
+  
+  showUndoBtn();
+});
+
+// === VISUAL MATCHER ===
+function searchBlock(query) {
+  const ac = document.getElementById('matcher-autocomplete');
+  if(!query || query.length < 2) { ac.style.display = 'none'; return; }
+  
+  const filtered = BLOCKS.filter(b => 
+    b.d.toLowerCase().includes(query.toLowerCase()) || 
+    b.n.toLowerCase().includes(query.toLowerCase())
+  ).slice(0, 8);
+  
+  if(filtered.length === 0) { ac.style.display = 'none'; return; }
+  
+  ac.innerHTML = '';
+  filtered.forEach(b => {
+    const item = document.createElement('div');
+    item.className = 'autocomplete-item';
+    item.innerHTML = `<div class="color-box" style="background:${b.c};">${b.e}</div><span><b>${b.d}</b></span>`;
+    item.onclick = () => { selectMatcher(b); ac.style.display='none'; document.getElementById('matcher-search').value = b.d; };
+    ac.appendChild(item);
+  });
+  ac.style.display = 'block';
+}
+
+function selectMatcher(block) {
+  const matches = BLOCKS.map(b => {
+    const dist = Math.sqrt((block.r-b.r)**2 + (block.g-b.g)**2 + (block.b-b.b)**2);
+    return {block: b, dist: dist};
+  }).sort((a,b) => a.dist - b.dist).slice(0, 8);
+  
+  let html = '<div class="block-grid">';
+  matches.forEach(m => {
+    const percent = Math.max(0, 100 - Math.round(m.dist / 4.41)).toFixed(0);
+    html += `<div class="block-item">
+      <div class="block-item-icon" style="background:${m.block.c};">${m.block.e}</div>
+      <div class="name">${m.block.d}</div>
+      <div class="match">${percent}% match</div>
+    </div>`;
+  });
+  html += '</div>';
+  
+  document.getElementById('matcher-result').innerHTML = html;
+}
+
+// === WALL DESIGN GENERATOR ===
+let wallBlocks = [];
+
+function addWallBlock() {
+  const id = Date.now();
+  wallBlocks.push({id: id, block: 'stone', percent: 0});
+  renderWallBlocks();
+}
+
+function renderWallBlocks() {
+  const container = document.getElementById('wall-blocks');
+  if(wallBlocks.length === 0) { 
+    container.innerHTML = ''; 
+    updateWallCommand(); 
+    renderWallPreview();
+    return; 
+  }
+  
+  const equal = Math.floor(100 / wallBlocks.length);
+  const remainder = 100 - (equal * wallBlocks.length);
+  wallBlocks.forEach((wb, idx) => {
+    if(wb.percent === 0) wb.percent = equal + (idx === 0 ? remainder : 0);
+  });
+  
+  container.innerHTML = '';
+  wallBlocks.forEach((wb, idx) => {
+    const blockData = BLOCKS.find(b => b.n === wb.block) || BLOCKS[0];
+    const div = document.createElement('div');
+    div.className = 'mixer-block';
+    
+    let options = '';
+    BLOCKS.forEach(b => {
+      options += `<option value="${b.n}" ${b.n === wb.block ? 'selected' : ''}>${b.e} ${b.d}</option>`;
+    });
+    
+    div.innerHTML = `
+      <div class="mixer-block-header">
+        <div class="mixer-block-icon" style="background:${blockData.c};">${blockData.e}</div>
+        <select onchange="updateWallBlockChoice(${idx}, this.value)">${options}</select>
+        <button class="remove" onclick="removeWallBlock(${idx})">✕</button>
+      </div>
+      <div class="mixer-slider-container">
+        <input type="range" min="0" max="100" value="${wb.percent}" oninput="updateWallPercent(${idx}, this.value)">
+        <span class="percent">${wb.percent}%</span>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+  
+  updateWallCommand();
+  renderWallPreview();
+}
+
+function updateWallBlockChoice(idx, blockName) {
+  wallBlocks[idx].block = blockName;
+  renderWallBlocks();
+}
+
+function updateWallPercent(idx, val) {
+  wallBlocks[idx].percent = parseInt(val);
+  
+  const total = wallBlocks.reduce((sum, wb) => sum + wb.percent, 0);
+  if(total > 100) {
+    const excess = total - 100;
+    wallBlocks[idx].percent -= excess;
+  }
+  
+  renderWallBlocks();
+}
+
+function removeWallBlock(idx) {
+  wallBlocks.splice(idx, 1);
+  renderWallBlocks();
+}
+
+function renderWallPreview() {
+  const canvas = document.getElementById('wall-canvas');
+  canvas.innerHTML = '';
+  
+  if(wallBlocks.length === 0) {
+    for(let i = 0; i < 100; i++) {
+      const pixel = document.createElement('div');
+      pixel.className = 'wall-pixel';
+      pixel.style.background = '#7d7d7d';
+      canvas.appendChild(pixel);
+    }
+    return;
+  }
+  
+  let blockArray = [];
+  wallBlocks.forEach(wb => {
+    const blockData = BLOCKS.find(b => b.n === wb.block) || BLOCKS[0];
+    for(let i = 0; i < wb.percent; i++) {
+      blockArray.push(blockData.c);
     }
   });
-  </script>
+  
+  for(let i = 0; i < 100; i++) {
+    const pixel = document.createElement('div');
+    pixel.className = 'wall-pixel';
+    const randomColor = blockArray[Math.floor(Math.random() * blockArray.length)];
+    pixel.style.background = randomColor || '#7d7d7d';
+    canvas.appendChild(pixel);
+  }
+}
+
+function regenerateWall() {
+  renderWallPreview();
+  showToast("Ściana zregenerowana!");
+}
+
+function updateWallCommand() {
+  const total = wallBlocks.reduce((sum, wb) => sum + wb.percent, 0);
+  document.getElementById('wall-total').innerText = total + '%';
+  
+  const cmdType = document.getElementById('wall-cmd-type').value;
+  
+  if(wallBlocks.length === 0) {
+    document.getElementById('wall-command').innerText = `//${cmdType} stone`;
+    return;
+  }
+  
+  const pattern = wallBlocks.map(wb => `${wb.percent}%${wb.block}`).join(',');
+  document.getElementById('wall-command').innerText = `//${cmdType} ${pattern}`;
+}
+
+function copyWallCommand() {
+  const cmd = document.getElementById('wall-command').innerText;
+  navigator.clipboard.writeText(cmd);
+  showToast("Komenda skopiowana!");
+}
+
+// === WORLDEDIT HELPER ===
+function updateWEUI() {
+  const type = document.getElementById('we-type').value;
+  document.getElementById('we-from-group').style.display = type === 'replace' ? 'block' : 'none';
+  updateWECommand();
+}
+
+function updateWECommand() {
+  const sel = document.getElementById('we-sel').value;
+  const type = document.getElementById('we-type').value;
+  const from = document.getElementById('we-from').value || 'stone';
+  const to = document.getElementById('we-to').value || 'oak_planks';
+  const logic = document.getElementById('we-logic').value;
+  const mask = document.getElementById('we-mask').value;
+  const brush = document.getElementById('we-brush').value;
+  const radius = document.getElementById('we-radius').value;
+  
+  let cmd = `//sel ${sel}\n`;
+  
+  if(type === 'set') {
+    cmd += `//${type} ${to}`;
+  } else {
+    cmd += `//${type} ${from} ${to}`;
+  }
+  
+  if(logic) cmd += ` ${logic}`;
+  if(mask) cmd += ` -m ${mask}`;
+  
+  cmd += `\n\n# BRUSH\n//br ${brush} ${to} ${radius}`;
+  
+  document.getElementById('we-output-text').innerText = cmd;
+}
+
+function copyWECommand() {
+  const cmd = document.getElementById('we-output-text').innerText;
+  navigator.clipboard.writeText(cmd);
+  showToast("Komenda skopiowana!");
+}
+
+// === MAP TOOLS ===
+function undoLast() {
+  if(marker) { map.removeLayer(marker); marker=null; }
+  document.getElementById('undo-btn').classList.remove('visible');
+  showToast("Cofnięto");
+}
+
+function showUndoBtn() {
+  document.getElementById('undo-btn').classList.add('visible');
+  setTimeout(() => document.getElementById('undo-btn').classList.remove('visible'), 5000);
+}
+
+function toggleRuler() {
+  rulerMode = !rulerMode;
+  rulerPoints = [];
+  if(rulerLine) map.removeLayer(rulerLine);
+  const st = document.getElementById('ruler-status');
+  const card = document.getElementById('ruler-card');
+  if(rulerMode) {
+    st.innerText = "Aktywny";
+    st.style.color = "white";
+    card.classList.add('selected');
+    map.getContainer().style.cursor = "crosshair";
+    showToast("Miarka aktywna");
+  } else {
+    st.innerText = "Nieaktywny";
+    st.style.color = "var(--text-muted)";
+    card.classList.remove('selected');
+    map.getContainer().style.cursor = "";
+  }
+}
+
+function handleRuler(latlng) {
+  rulerPoints.push(latlng);
+  L.circleMarker(latlng, {radius:4, color:'var(--accent)'}).addTo(map);
+  if(rulerPoints.length === 2) {
+    rulerLine = L.polyline(rulerPoints, {color:'var(--accent)', weight:4, dashArray:'5, 10'}).addTo(map);
+    const dist = map.distance(rulerPoints[0], rulerPoints[1]);
+    const distTxt = dist > 1000 ? (dist/1000).toFixed(2)+" km" : Math.round(dist)+" m";
+    L.popup().setLatLng(rulerLine.getCenter()).setContent(`<b>Dystans:</b> ${distTxt}`).openOn(map);
+    rulerPoints = []; 
+  }
+}
+
+async function doSearch() {
+  const q = document.getElementById('search-input').value;
+  if(!q) return;
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
+    const d = await r.json();
+    if(d && d.length > 0) {
+      const {lat, lon} = d[0];
+      map.setView([lat, lon], 16);
+      map.fireEvent('click', {latlng: L.latLng(lat, lon)});
+      showToast(`Znaleziono: ${q}`);
+    } else {
+      showToast("Nie znaleziono", "error");
+    }
+  } catch(e) { showToast("Błąd", "error"); }
+}
+function handleSearch(e) { if(e.key==='Enter') doSearch(); }
+
+function renderHistory() {
+  const list = document.getElementById('hist-list');
+  if(historyData.length === 0) { list.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text-muted);font-size:12px;">Brak historii</div>'; return; }
+  list.innerHTML = "";
+  historyData.slice(0, 10).forEach(item => {
+    const el = document.createElement('div');
+    el.style.cssText = "display:flex; justify-content:space-between; padding:10px 12px; border-bottom:1px solid var(--border); font-size:11px; cursor:pointer; align-items:center; transition: var(--anim);";
+    el.innerHTML = `<span style="font-weight:600">${item.addr.substring(0,20)}...</span><span style="color:var(--accent); font-size:10px; background:rgba(139,92,246,0.15); padding:3px 6px; border-radius:5px; font-family:monospace;">${item.tpll.substring(0,25)}...</span>`;
+    el.onmouseenter = () => el.style.background = 'rgba(139,92,246,0.08)';
+    el.onmouseleave = () => el.style.background = 'transparent';
+    el.onclick = () => {
+      map.setView([item.lat, item.lng], 18);
+      lastTPLL = item.tpll;
+      document.getElementById('last-tpll').innerText = item.tpll;
+      navigator.clipboard.writeText(item.tpll);
+      showToast("Skopiowano!");
+      if(window.innerWidth < 900) toggleSidebar();
+    };
+    list.appendChild(el);
+  });
+}
+
+function exportHistory() {
+  let txt = "GeoMatrix History Export\n\n";
+  historyData.forEach(h => txt += `${h.tpll} | ${h.addr} | ${h.date}\n`);
+  const blob = new Blob([txt], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'geomatrix_history.txt';
+  a.click();
+  showToast("Historia wyeksportowana!");
+}
+
+function clearHistory() {
+  if(confirm("Wyczyścić całą historię?")) {
+    historyData = [];
+    localStorage.removeItem('geoHistory');
+    renderHistory();
+    showToast("Historia wyczyszczona");
+  }
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+function toggleTheme() {
+  const b = document.body;
+  const isDark = b.getAttribute('data-theme') === 'dark';
+  b.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.querySelector('.theme-toggle i').className = isDark ? 'ph ph-sun' : 'ph ph-moon';
+}
+
+function shareLink() {
+  const c = map.getCenter();
+  const z = map.getZoom();
+  const url = `${window.location.origin}${window.location.pathname}?lat=${c.lat.toFixed(5)}&lng=${c.lng.toFixed(5)}&zoom=${z}`;
+  navigator.clipboard.writeText(url);
+  showToast("Link skopiowany!");
+}
+
+function takeScreenshot() { 
+  map.fire('simpleMapScreenshoter?takeScreen');
+  showToast("Zrobiono screenshot!");
+}
+
+let hmOn = false;
+function toggleHeatmap() {
+  hmOn = !hmOn;
+  if(hmOn) {
+    if(heatData.length === 0) showToast("Brak danych (kliknij na mapę)", "error");
+    else { heatLayer = L.heatLayer(heatData, {radius:25}).addTo(map); showToast("Heatmapa włączona"); }
+  } else {
+    if(heatLayer) { map.removeLayer(heatLayer); showToast("Heatmapa wyłączona"); }
+  }
+}
+
+function userLoc() { 
+  map.locate({setView:true, maxZoom:16}); 
+  showToast("Szukam lokalizacji...");
+}
+
+function tab(id, btn) {
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view-'+id).classList.add('active');
+  btn.classList.add('active');
+}
+
+function setLayer(n, el) {
+  document.querySelectorAll('.card').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+  map.eachLayer(l=>map.removeLayer(l));
+  lyrs[n].addTo(map);
+  if(marker) marker.addTo(map);
+  if(rulerLine) rulerLine.addTo(map);
+  if(hmOn && heatLayer) heatLayer.addTo(map);
+}
+
+function copyLast() { if(lastTPLL) { navigator.clipboard.writeText(lastTPLL); showToast("Skopiowano!"); } }
+function clearMap() { 
+  if(marker) map.removeLayer(marker); 
+  if(rulerLine) map.removeLayer(rulerLine); 
+  lastTPLL=""; 
+  document.getElementById('last-tpll').innerText="---"; 
+  showToast("Mapa wyczyszczona"); 
+}
+
+// INIT
+updateWECommand();
+renderWallPreview();
+</script>
 </body>
 </html>
